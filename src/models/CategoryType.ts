@@ -1,0 +1,1 @@
+export type CategoryType = "All" | "Flutter" | "React Native"; 
