@@ -21,21 +21,41 @@ class DetectorModule(reactContext: ReactApplicationContext) : ReactContextBaseJa
             val pm = reactApplicationContext.packageManager
             val packages = pm.getInstalledApplications(PackageManager.GET_META_DATA)
             val apps = Arguments.createArray()
+            
+            Log.d("DetectorModule", "Found ${packages.size} installed applications")
+            
             for (app in packages) {
-                val appMap = Arguments.createMap()
-                appMap.putString("packageName", app.packageName)
-                appMap.putString("appName", pm.getApplicationLabel(app).toString())
-                val icon = pm.getApplicationIcon(app)
-                appMap.putString("icon", drawableToBase64(icon))
-                val framework = detectFramework(app)
-                Log.d("DetectorModule", "Detected framework for ${app.sourceDir}: $framework")
-                appMap.putString("framework", framework)
-                appMap.putArray("packages", Arguments.createArray()) // Placeholder
-                apps.pushMap(appMap)
+                try {
+                    val appMap = Arguments.createMap()
+                    appMap.putString("packageName", app.packageName)
+                    appMap.putString("appName", pm.getApplicationLabel(app).toString())
+                    
+                    // Check if we can access the app icon
+                    val icon = try {
+                        pm.getApplicationIcon(app)
+                    } catch (e: Exception) {
+                        Log.w("DetectorModule", "Cannot get icon for ${app.packageName}: ${e.message}")
+                        null
+                    }
+                    
+                    appMap.putString("icon", if (icon != null) drawableToBase64(icon) else "")
+                    
+                    val framework = detectFramework(app)
+                    Log.d("DetectorModule", "Detected framework for ${app.packageName}: $framework")
+                    appMap.putString("framework", framework)
+                    appMap.putArray("packages", Arguments.createArray()) // Placeholder
+                    apps.pushMap(appMap)
+                } catch (e: Exception) {
+                    Log.e("DetectorModule", "Error processing app ${app.packageName}: ${e.message}")
+                    // Continue with next app instead of failing completely
+                }
             }
+            
+            Log.d("DetectorModule", "Successfully processed ${apps.size()} applications")
             promise.resolve(apps)
         } catch (e: Exception) {
-            promise.reject("ERROR", e)
+            Log.e("DetectorModule", "Error getting installed apps: ${e.message}", e)
+            promise.reject("ERROR", "Failed to get installed apps: ${e.message}")
         }
     }
 
@@ -46,9 +66,13 @@ class DetectorModule(reactContext: ReactApplicationContext) : ReactContextBaseJa
             val app = pm.getApplicationInfo(packageName, PackageManager.GET_META_DATA)
             val framework = detectFramework(app)
             val packages = Arguments.createArray()
+            
+            Log.d("DetectorModule", "Analyzing packages for $packageName (framework: $framework)")
+            
             when (framework) {
                 "Flutter" -> {
                     val pkgs = extractFlutterPackages(app)
+                    Log.d("DetectorModule", "Found ${pkgs.size} Flutter packages")
                     pkgs.forEach { pkg ->
                         val pkgMap = Arguments.createMap()
                         pkgMap.putString("name", pkg.first)
@@ -58,16 +82,21 @@ class DetectorModule(reactContext: ReactApplicationContext) : ReactContextBaseJa
                 }
                 "React Native" -> {
                     val pkgs = extractReactNativePackages(app)
+                    Log.d("DetectorModule", "Found ${pkgs.size} React Native packages")
                     pkgs.forEach { name ->
                         val pkgMap = Arguments.createMap()
                         pkgMap.putString("name", name)
                         packages.pushMap(pkgMap)
                     }
                 }
+                else -> {
+                    Log.d("DetectorModule", "Unknown framework for $packageName")
+                }
             }
             promise.resolve(packages)
         } catch (e: Exception) {
-            promise.reject("ERROR", e)
+            Log.e("DetectorModule", "Error getting packages for $packageName: ${e.message}", e)
+            promise.reject("ERROR", "Failed to get packages for $packageName: ${e.message}")
         }
     }
 
