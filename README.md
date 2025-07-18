@@ -56,5 +56,5 @@ How to start your project
 
 ```bash
 cd project-name
-npm react-native run-android
+npx react-native run-android
 ```
